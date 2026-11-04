@@ -1,0 +1,91 @@
+
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+
+    <link rel="stylesheet"
+          href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <style>
+        html, body, #map {
+            width: 100%;
+            height: 100%;
+            margin: 0;
+        }
+    </style>
+</head>
+<body>
+<div id="map"></div>
+
+<script>
+    const map = L.map('map').setView([51.92, 4.48], 12);
+
+    L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+
+    // Группы для районов и заказов
+    const districtLayer = L.layerGroup().addTo(map);
+    const orderLayer = L.layerGroup().addTo(map);
+
+    // Удаляем старые данные с карты
+    function clearData() {
+        districtLayer.clearLayers();
+        orderLayer.clearLayers();
+pathLayer.clearLayers();
+    }
+
+    // Добавление района
+    function addDistrict(feature) {
+        L.geoJSON(feature, {
+            style: {
+                color: 'red',
+                fillOpacity: 0.25
+            },
+            onEachFeature: function(feature, layer) {
+                layer.bindPopup(feature.properties.name);
+            }
+        }).addTo(districtLayer);
+    }
+
+    // Добавление заказа
+    function addOrder(feature) {
+        L.geoJSON(feature, {
+            pointToLayer: function(feature, latlng) {
+                return L.circleMarker(latlng, {
+                    radius: 7,
+                    color: 'blue',
+                    fillColor: 'blue',
+                    fillOpacity: 0.8
+                });
+            },
+            onEachFeature: function(feature, layer) {
+                const p = feature.properties;
+
+                layer.bindPopup(
+                    `Заказ №${p.id}<hr>
+                     Срочность: ${p.urgency}<br>
+                     Статус: ${p.status}<br>
+                     Дедлайн: ${p.deadline ?? 'Не указан'}`
+                );
+            }
+        }).addTo(orderLayer);
+    }
+const pathLayer = L.layerGroup().addTo(map);
+
+function addOptimalPath(feature) {
+    pathLayer.clearLayers();
+
+    L.geoJSON(feature, {
+        style: {
+            color: 'green',
+            weight: 4
+        }
+    }).addTo(pathLayer);
+}
+</script>
+</body>
+</html>
