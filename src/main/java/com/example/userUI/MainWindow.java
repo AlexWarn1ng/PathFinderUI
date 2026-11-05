@@ -25,7 +25,7 @@ public class MainWindow {
     private final OrderRepository OrderRepository;
     private final GeoJsonConverter converter;
     private long lastCountOfReadedOrders = 0;
-
+    private WebEngine engine;
     public MainWindow(OrderRepository OrderRepository, DistrictRepository DistrictRepository, ObjectMapper mapper) {
         this.OrderRepository = OrderRepository;
         this.DistrictRepository = DistrictRepository;
@@ -38,10 +38,6 @@ public class MainWindow {
         label.setText("New orders from last update: " + Long.toString(newCount));
         engine.executeScript("clearData()");
 
-
-        try{OptimalPathFinder( 1, engine, converter);} catch (Exception e) {
-            throw new RuntimeException(e);
-        }
 
         for (DistrictEntity district : DistrictRepository.findAll()) {
             try {
@@ -73,7 +69,7 @@ public class MainWindow {
         label.setText("Click 'Reload map' to update map data");
         ToolBar toolBar = new ToolBar(connectButton, createButton);
         WebView webView = new WebView();
-        WebEngine engine = webView.getEngine();
+        engine = webView.getEngine();
         TableView tableView = new TableView(); createTable(tableView);
 
         engine.getLoadWorker().stateProperty().addListener(
@@ -124,7 +120,36 @@ public class MainWindow {
                 new ReadOnlyStringWrapper(data.getValue().getCreatedAt().format(formatter))
         );
 
-        tableView.getColumns().addAll(id, district, coords, deadline, urgency, status, createdAt);
+        TableColumn<OrderEntity, Void> action = new TableColumn<>("Action");
+
+        action.setCellFactory(col -> new TableCell<>() {
+            private final Button button = new Button("Select");
+
+            {
+                button.setOnAction(event -> {
+                    Integer id = getTableRow().getItem().getId();
+                    Integer district = getTableRow().getItem().getDistrictId();
+
+                    try{OptimalPathFinder(district, id, engine, converter);} catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
+                    System.out.println(id);
+                    System.out.println(district);
+                });
+            }
+            @Override
+            protected void updateItem(Void item, boolean empty) {
+                super.updateItem(item, empty);
+                setGraphic(empty ? null : button);
+            }
+        });
+        action.setPrefWidth(75);
+        action.setMinWidth(75);
+        action.setMaxWidth(75);
+        action.setResizable(false);
+        action.setReorderable(false);
+
+        tableView.getColumns().addAll(id, district, coords, deadline, urgency, status, createdAt, action);
     }
 
 }

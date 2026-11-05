@@ -10,13 +10,10 @@ import java.net.http.HttpResponse;
 
 public class OptimalPath {
 
-   static void OptimalPathFinder(Integer districtId, WebEngine webEngine,GeoJsonConverter converter) throws Exception{
+   static void OptimalPathFinder(Integer districtId, Integer startPointId, WebEngine webEngine,GeoJsonConverter converter) throws Exception {
        HttpClient client = HttpClient.newHttpClient();
-       HttpRequest request = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/getoptimalpath?districtId="+ districtId)).GET().build();
+       HttpRequest request = HttpRequest.newBuilder().uri(URI.create("http://localhost:8080/getoptimalpath?districtId="+ districtId + "&startPointId=" + startPointId)).GET().build();
        HttpResponse<String> response = client.send(request, HttpResponse.BodyHandlers.ofString());
-       String geoJson = response.body();
-       geoJson = converter.convertPath(response.body());
-       webEngine.executeScript("addOptimalPath(" + geoJson + ")");
-
+       webEngine.executeScript("addOptimalPath(" + response.body() + ")");
     }
 }

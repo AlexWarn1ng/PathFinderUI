@@ -9,6 +9,9 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 
+    <!-- Route direction arrows -->
+    <script src="https://unpkg.com/leaflet-polylinedecorator@1.6.0/dist/leaflet.polylineDecorator.js"></script>
+
     <style>
         html, body, #map {
             width: 100%;
@@ -17,6 +20,7 @@
         }
     </style>
 </head>
+
 <body>
 <div id="map"></div>
 
@@ -24,68 +28,182 @@
     const map = L.map('map').setView([51.92, 4.48], 12);
 
     L.tileLayer('https://tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        attribution: '&copy; OpenStreetMap contributors'
+        attribution: '&copy; OpenStreetMap contributors',
+        maxZoom: 19
     }).addTo(map);
 
-    // Группы для районов и заказов
+    // Custom panes to control rendering order
+    map.createPane('districtPane');
+    map.createPane('pathPane');
+    map.createPane('orderPane');
+    map.createPane('endpointPane');
+
+    map.getPane('districtPane').style.zIndex = 410;
+    map.getPane('pathPane').style.zIndex = 420;
+    map.getPane('orderPane').style.zIndex = 430;
+    map.getPane('endpointPane').style.zIndex = 440;
+
+    // Layer groups
     const districtLayer = L.layerGroup().addTo(map);
     const orderLayer = L.layerGroup().addTo(map);
+    const pathLayer = L.layerGroup().addTo(map);
 
-    // Удаляем старые данные с карты
+    // Clear all map data
     function clearData() {
         districtLayer.clearLayers();
         orderLayer.clearLayers();
-pathLayer.clearLayers();
+        pathLayer.clearLayers();
     }
 
-    // Добавление района
+    // Clear only the route
+    function clearOptimalPath() {
+        pathLayer.clearLayers();
+    }
+
+    // Add a district polygon
     function addDistrict(feature) {
         L.geoJSON(feature, {
+            pane: 'districtPane',
+
             style: {
                 color: 'red',
+                weight: 2,
                 fillOpacity: 0.25
             },
+
             onEachFeature: function(feature, layer) {
-                layer.bindPopup(feature.properties.name);
+                if (feature.properties) {
+                    layer.bindPopup(
+                        feature.properties.name || 'District'
+                    );
+                }
             }
         }).addTo(districtLayer);
     }
 
-    // Добавление заказа
+    // Add an order marker
     function addOrder(feature) {
         L.geoJSON(feature, {
             pointToLayer: function(feature, latlng) {
                 return L.circleMarker(latlng, {
+                    pane: 'orderPane',
                     radius: 7,
                     color: 'blue',
                     fillColor: 'blue',
                     fillOpacity: 0.8
                 });
             },
+
             onEachFeature: function(feature, layer) {
-                const p = feature.properties;
+                const p = feature.properties || {};
 
                 layer.bindPopup(
-                    `Заказ №${p.id}<hr>
-                     Срочность: ${p.urgency}<br>
-                     Статус: ${p.status}<br>
-                     Дедлайн: ${p.deadline ?? 'Не указан'}`
+                    `Order #${p.id}<hr>
+                     Urgency: ${p.urgency}<br>
+                     Status: ${p.status}<br>
+                     Deadline: ${p.deadline ?? 'Not specified'}`
                 );
             }
         }).addTo(orderLayer);
     }
-const pathLayer = L.layerGroup().addTo(map);
 
-function addOptimalPath(feature) {
-    pathLayer.clearLayers();
+    // Add an optimized route from OSRM
+    function addOptimalPath(data) {
+        pathLayer.clearLayers();
 
-    L.geoJSON(feature, {
-        style: {
-            color: 'green',
-            weight: 4
+        if (typeof data === 'string') {
+            data = JSON.parse(data);
         }
-    }).addTo(pathLayer);
-}
+
+        if (data.code !== 'Ok' ||
+            !data.trips ||
+            data.trips.length === 0) {
+            console.error('OSRM error:', data);
+            return;
+        }
+
+        const trip = data.trips[0];
+        const geometry = trip.geometry;
+
+        // Draw the route
+        const route = L.geoJSON(geometry, {
+            pane: 'pathPane',
+
+            style: {
+                color: 'green',
+                weight: 4,
+                opacity: 0.9
+            }
+        }).addTo(pathLayer);
+
+        // Add direction arrows
+        if (typeof L.polylineDecorator === 'function') {
+            const line = route.getLayers()[0];
+
+            if (line) {
+                L.polylineDecorator(line, {
+                    patterns: [{
+                        offset: '12px',
+                        repeat: '35px',
+
+                        symbol: L.Symbol.arrowHead({
+                            pixelSize: 9,
+                            polygon: true,
+
+                            pathOptions: {
+                                pane: 'pathPane',
+                                color: 'green',
+                                fillColor: 'green',
+                                fillOpacity: 1,
+                                weight: 0
+                            }
+                        })
+                    }]
+                }).addTo(pathLayer);
+            }
+        }
+
+        // Mark the start and end points of the route.
+        // GeoJSON coordinates use [longitude, latitude].
+        const coordinates = geometry.coordinates;
+
+        if (coordinates && coordinates.length >= 2) {
+            const first = coordinates[0];
+            const last = coordinates[coordinates.length - 1];
+
+            const start = L.circleMarker([first[1], first[0]], {
+                pane: 'endpointPane',
+                radius: 10,
+                color: 'white',
+                weight: 3,
+                fillColor: '#16a34a',
+                fillOpacity: 1
+            }).addTo(pathLayer);
+
+            start.bindPopup('START - Route starting point');
+
+            const finish = L.circleMarker([last[1], last[0]], {
+                pane: 'endpointPane',
+                radius: 10,
+                color: 'white',
+                weight: 3,
+                fillColor: '#dc2626',
+                fillOpacity: 1
+            }).addTo(pathLayer);
+
+            finish.bindPopup('FINISH - Route ending point');
+        }
+
+        // Fit the map to display the entire route
+        const bounds = route.getBounds();
+
+        if (bounds.isValid()) {
+            map.fitBounds(bounds, {
+                padding: [20, 20]
+            });
+        }
+    }
+
 </script>
 </body>
 </html>
