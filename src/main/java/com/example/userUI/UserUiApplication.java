@@ -13,7 +13,4 @@ public class UserUiApplication {
         MainWindow mainWindow = context.getBean(MainWindow.class);
         Platform.startup(() -> mainWindow.window());
     }
-
-
-
 }

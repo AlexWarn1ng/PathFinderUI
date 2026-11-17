@@ -2,13 +2,21 @@ package com.example.userUI;
 import com.example.userUI.DistrictEntity;
 import tools.jackson.databind.ObjectMapper;
 import org.locationtech.jts.geom.Coordinate;
-
+import java.util.List;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 public class GeoJsonConverter {
 
     private final ObjectMapper mapper;
+
+    public List<CouriersEntity> parseCouriers(String json) throws Exception {
+        return Arrays.asList(mapper.readValue(json, CouriersEntity[].class));
+    }
+
+    public List<Integer> parseCourierOrderIds(String json) throws Exception {
+        return Arrays.asList(mapper.readValue(json, Integer[].class));
+    }
 
     public GeoJsonConverter(ObjectMapper mapper) {
         this.mapper = mapper;
@@ -72,4 +80,6 @@ public class GeoJsonConverter {
                 "properties", Map.of()
         ));
     }
+
+
 }

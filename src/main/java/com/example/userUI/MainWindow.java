@@ -4,6 +4,7 @@ import javafx.beans.property.ReadOnlyObjectWrapper;
 import javafx.beans.property.ReadOnlyStringWrapper;
 import javafx.scene.Scene;
 import javafx.scene.control.*;
+import javafx.scene.layout.HBox;
 import javafx.scene.layout.VBox;
 import javafx.scene.web.WebEngine;
 import javafx.scene.web.WebView;
@@ -24,18 +25,18 @@ public class MainWindow {
     private final DistrictRepository DistrictRepository;
     private final OrderRepository OrderRepository;
     private final GeoJsonConverter converter;
-    private long lastCountOfReadedOrders = 0;
     private WebEngine engine;
+
     public MainWindow(OrderRepository OrderRepository, DistrictRepository DistrictRepository, ObjectMapper mapper) {
         this.OrderRepository = OrderRepository;
         this.DistrictRepository = DistrictRepository;
         this.converter = new GeoJsonConverter(mapper);
     }
 
-    void connect(WebView webView, Label label, TableView tableView ) {
+    void connect(WebView webView, Label label, TableView tableView) {
         WebEngine engine = webView.getEngine();
-        long newCount = OrderRepository.countAllOrders() - lastCountOfReadedOrders;
-        label.setText("New orders from last update: " + Long.toString(newCount));
+        long ordersCount = OrderRepository.countAllOrders();
+        label.setText("Orders from last update: " + Long.toString(ordersCount));
         engine.executeScript("clearData()");
 
 
@@ -49,7 +50,6 @@ public class MainWindow {
             }
         }
         for (OrderEntity order : OrderRepository.findAll()) {
-            tableView.getItems().add(order);
             try {
                 if (order.getCoords() == null) continue;
 
@@ -70,7 +70,8 @@ public class MainWindow {
         ToolBar toolBar = new ToolBar(connectButton, createButton);
         WebView webView = new WebView();
         engine = webView.getEngine();
-        TableView tableView = new TableView(); createTable(tableView);
+        TableView<CouriersEntity> tableView = new TableView<>();
+        createCouriersTable(tableView);
 
         engine.getLoadWorker().stateProperty().addListener(
                 (obs, oldState, newState) -> {
@@ -94,62 +95,81 @@ public class MainWindow {
 
     }
 
-    void createTable(TableView<OrderEntity> tableView) {
-        DateTimeFormatter formatter = DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm");
+    void createCouriersTable(TableView<CouriersEntity> tableView) {
 
-        TableColumn<OrderEntity, Integer> id = new TableColumn<>("ID");
-        TableColumn<OrderEntity, Integer> district = new TableColumn<>("District");
-        TableColumn<OrderEntity, Point> coords = new TableColumn<>("Coordinates");
-        TableColumn<OrderEntity, Integer> urgency = new TableColumn<>("Urgency");
-        TableColumn<OrderEntity, Integer> status = new TableColumn<>("Status");
-        TableColumn<OrderEntity, String> createdAt = new TableColumn<>("Created At");
-        TableColumn<OrderEntity, String> deadline = new TableColumn<>("Deadline");
+        TableColumn<CouriersEntity, Integer> id = new TableColumn<>("ID");
+        TableColumn<CouriersEntity, String> name = new TableColumn<>("Name");
+        TableColumn<CouriersEntity, String> surname = new TableColumn<>("Surname");
+        TableColumn<CouriersEntity, String> phone = new TableColumn<>("Phone");
+        TableColumn<CouriersEntity, String> workingTime = new TableColumn<>("Working Time");
+        TableColumn<CouriersEntity, String> workDistrict = new TableColumn<>("Work District");
 
         id.setCellValueFactory(data -> new ReadOnlyObjectWrapper<>(data.getValue().getId()));
-        district.setCellValueFactory(data -> new ReadOnlyObjectWrapper<>(data.getValue().getDistrictId()));
-        coords.setCellValueFactory(data -> new ReadOnlyObjectWrapper<>(data.getValue().getCoords()));
-        urgency.setCellValueFactory(data -> new ReadOnlyObjectWrapper<>(data.getValue().getUrgency()));
-        status.setCellValueFactory(data -> new ReadOnlyObjectWrapper<>(data.getValue().getStatus()));
+        name.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getName()));
+        surname.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getSurname()));
+        phone.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getPhone()));
+        workingTime.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getWorkingTime()));
+        workDistrict.setCellValueFactory(data -> new ReadOnlyStringWrapper(data.getValue().getWorkDistrict()));
 
-
-        deadline.setCellValueFactory(data ->
-                new ReadOnlyStringWrapper(data.getValue().getDeadline().format(formatter))
-        );
-
-        createdAt.setCellValueFactory(data ->
-                new ReadOnlyStringWrapper(data.getValue().getCreatedAt().format(formatter))
-        );
-
-        TableColumn<OrderEntity, Void> action = new TableColumn<>("Action");
+        TableColumn<CouriersEntity, Void> action = new TableColumn<>("Action");
 
         action.setCellFactory(col -> new TableCell<>() {
-            private final Button button = new Button("Select");
+            private final ComboBox<Integer> comboBox = new ComboBox<>();
+            private final Button button = new Button("Make route");
+            private final HBox box = new HBox(10, comboBox, button);
 
             {
-                button.setOnAction(event -> {
-                    Integer id = getTableRow().getItem().getId();
-                    Integer district = getTableRow().getItem().getDistrictId();
+                comboBox.setPromptText("Start order");
 
-                    try{OptimalPathFinder(district, id, engine, converter);} catch (Exception e) {
+                comboBox.setOnShowing(event -> {
+                    try {
+                        Integer courierId = getTableRow().getItem().getId();
+                        String json = Requests.getCourierOrderIds(courierId);
+                        comboBox.getItems().setAll(converter.parseCourierOrderIds(json));
+
+                    } catch (Exception e) {
                         throw new RuntimeException(e);
                     }
-                    System.out.println(id);
-                    System.out.println(district);
+                });
+
+                button.setOnAction(event -> {
+                    try {
+                        Integer courierId = getTableRow().getItem().getId();
+                        Integer startOrderId = comboBox.getValue();
+
+                        if (startOrderId == null) return;
+
+                        OptimalPathFinder(courierId, startOrderId, engine, converter);
+
+                    } catch (Exception e) {
+                        throw new RuntimeException(e);
+                    }
                 });
             }
+
             @Override
             protected void updateItem(Void item, boolean empty) {
                 super.updateItem(item, empty);
-                setGraphic(empty ? null : button);
+                comboBox.getItems().clear();
+                comboBox.setValue(null);
+                setGraphic(empty ? null : box);
             }
         });
-        action.setPrefWidth(75);
-        action.setMinWidth(75);
-        action.setMaxWidth(75);
+
+        action.setPrefWidth(260);
+        action.setMinWidth(260);
+        action.setMaxWidth(260);
         action.setResizable(false);
         action.setReorderable(false);
 
-        tableView.getColumns().addAll(id, district, coords, deadline, urgency, status, createdAt, action);
+        tableView.getColumns().addAll(id, name, surname, phone, workingTime, workDistrict, action);
+
+        try {
+            String json = Requests.getCouriers();
+            tableView.getItems().setAll(converter.parseCouriers(json));
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 
 }
